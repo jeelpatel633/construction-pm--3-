@@ -23,6 +23,8 @@ app.use('/api/quotation-statements', require('./routes/Quotationstatements')); /
 const quotationPoc = require('./routes/quotationPocImages');
 app.use('/api/quotation-poc', quotationPoc);
 app.get('/', (_req, res) => res.json({ status: 'ConstructPro API v3' }));
+require('dotenv').config();
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`✅  API → http://localhost:${PORT}`));

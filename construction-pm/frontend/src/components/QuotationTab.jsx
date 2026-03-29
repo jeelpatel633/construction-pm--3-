@@ -504,7 +504,7 @@ const flushMeta = async () => {
     } catch(e) { console.error(e); }
   };
 
-  const downloadPdf = async () => {
+const downloadPdf = async () => {
     await flushMeta();
     await saveSig();
     try {
@@ -515,8 +515,12 @@ const flushMeta = async () => {
         pdf_type:     'quotation',
       });
       setDlLogs(prev => [res.data, ...prev]);
-    } catch(e) { console.error(e); }
-    window.open(`/api/quotation-pdf/${project.id}`, '_blank');
+      // ✅ Pass log ID so correct record gets updated
+      window.open(`/api/quotation-pdf/${project.id}?logId=${res.data.id}`, '_blank');
+    } catch(e) {
+      console.error(e);
+      window.open(`/api/quotation-pdf/${project.id}`, '_blank');
+    }
   };
 
   const previewPdf = async () => {

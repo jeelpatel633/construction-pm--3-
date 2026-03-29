@@ -1,7 +1,8 @@
 const router = require('express').Router();
 const db = require('../config/db');
-const fs = require('fs');
-const path = require('path');
+// const fs = require('fs');
+// const path = require('path');
+const cloudinary = require('../config/cloudinary');
 const PdfPrinter = require('pdfmake/src/printer');
 const vfs = require('pdfmake/build/vfs_fonts');
 
@@ -28,16 +29,26 @@ function numToWords(n) {
     n = Math.floor(Math.abs(n));
     if (n === 0) return 'Zero';
     let s = '';
-    if (n >= 10000000) { s += numToWords(Math.floor(n / 10000000)) + ' Crore ';
-        n %= 10000000; }
-    if (n >= 100000) { s += numToWords(Math.floor(n / 100000)) + ' Lakh ';
-        n %= 100000; }
-    if (n >= 1000) { s += numToWords(Math.floor(n / 1000)) + ' Thousand ';
-        n %= 1000; }
-    if (n >= 100) { s += ones[Math.floor(n / 100)] + ' Hundred ';
-        n %= 100; }
-    if (n >= 20) { s += tens[Math.floor(n / 10)] + ' ';
-        n %= 10; }
+    if (n >= 10000000) {
+        s += numToWords(Math.floor(n / 10000000)) + ' Crore ';
+        n %= 10000000;
+    }
+    if (n >= 100000) {
+        s += numToWords(Math.floor(n / 100000)) + ' Lakh ';
+        n %= 100000;
+    }
+    if (n >= 1000) {
+        s += numToWords(Math.floor(n / 1000)) + ' Thousand ';
+        n %= 1000;
+    }
+    if (n >= 100) {
+        s += ones[Math.floor(n / 100)] + ' Hundred ';
+        n %= 100;
+    }
+    if (n >= 20) {
+        s += tens[Math.floor(n / 10)] + ' ';
+        n %= 10;
+    }
     if (n > 0) { s += ones[n] + ' '; }
     return s.trim();
 }
@@ -80,10 +91,16 @@ const hCell = (text, align = 'left') => ({
     fillColor: DARK,
 });
 
-const PDF_SAVE_DIR = process.env.PDF_SAVE_DIR || 'C:\\NavyakarPDFs';
-
-function ensureSaveDir() {
-    try { if (!fs.existsSync(PDF_SAVE_DIR)) fs.mkdirSync(PDF_SAVE_DIR, { recursive: true }); } catch (e) {}
+async function uploadToCloudinary(buffer, filename) {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream({ resource_type: 'image', folder: 'navyakar/quotations', public_id: filename, format: 'pdf', access_mode: 'public', type: 'upload' },
+            (error, result) => {
+                if (error) reject(error);
+                else resolve(result.secure_url);
+            }
+        );
+        stream.end(buffer);
+    });
 }
 
 // ── Build "Project Vision & Concepts" PDF section ────────────────────────────
@@ -265,6 +282,7 @@ router.get('/:projectId', async(req, res) => {
     try {
         const pid = req.params.projectId;
         const isPreview = req.query.preview === '1';
+        const logId = req.query.logId || null;
 
         const [
             [
@@ -499,9 +517,7 @@ router.get('/:projectId', async(req, res) => {
                         dontBreakRows: false,
                         keepWithHeaderRows: 1,
                         widths,
-                        body: items.length > 0 ?
-                            [headers, ...rows, subtotalRow] :
-                            [headers, [{ text: 'No items added yet.', colSpan: headers.length, italics: true, fontSize: 9, color: GRAY, alignment: 'center', margin: [0, 16, 0, 16], border: [false, false, false, false] }, ...Array(headers.length - 1).fill({})]]
+                        body: items.length > 0 ? [headers, ...rows, subtotalRow] : [headers, [{ text: 'No items added yet.', colSpan: headers.length, italics: true, fontSize: 9, color: GRAY, alignment: 'center', margin: [0, 16, 0, 16], border: [false, false, false, false] }, ...Array(headers.length - 1).fill({})]]
                     },
                     layout: {
                         fillColor: ri => ri === 0 ? null : (ri % 2 === 0 ? STRIPE : WHITE),
@@ -638,24 +654,27 @@ router.get('/:projectId', async(req, res) => {
         res.setHeader('Content-Disposition', isPreview ? 'inline' : `attachment; filename="${fname}"`);
 
         if (!isPreview) {
-            ensureSaveDir();
-            const dateStr = new Date().toISOString().slice(0, 10);
-            const savedName = `${dateStr}_QUO_${project.project_name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
-            const savedPath = path.join(PDF_SAVE_DIR, savedName);
-
+            const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const savedName = `${dateStr}_QUO_${project.project_name.replace(/[^a-zA-Z0-9]/g,'_')}`;
             const pdfDoc = printer.createPdfKitDocument(docDef);
             const chunks = [];
             pdfDoc.on('data', c => chunks.push(c));
             pdfDoc.on('end', async() => {
                 const buf = Buffer.concat(chunks);
-                try { fs.writeFileSync(savedPath, buf); } catch (e) { console.error('PDF save error:', e.message); }
-                try {
-                    await db.query(
-                        "UPDATE pdf_downloads SET file_path=? WHERE project_id=? AND pdf_type='quotation' ORDER BY downloaded_at DESC LIMIT 1", [savedPath, pid]
-                    );
-                } catch (e) {}
+                // ✅ Send to user immediately — no waiting
                 res.setHeader('Content-Length', buf.length);
                 res.end(buf);
+                // ✅ Upload to Cloudinary in background
+                uploadToCloudinary(buf, savedName)
+                    .then(url => {
+                        if (logId) {
+                            return db.query("UPDATE pdf_downloads SET file_path=? WHERE id=?", [url, logId]);
+                        }
+                        return db.query(
+                            "UPDATE pdf_downloads SET file_path=? WHERE project_id=? AND pdf_type='quotation' ORDER BY downloaded_at DESC LIMIT 1", [url, pid]
+                        );
+                    })
+                    .catch(e => console.error('Cloudinary upload error:', e.message));
             });
             pdfDoc.on('error', err => { if (!res.headersSent) res.status(500).json({ error: err.message }); });
             pdfDoc.end();

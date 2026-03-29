@@ -2,8 +2,7 @@ const router = require('express').Router();
 const db = require('../config/db');
 const fs = require('fs');
 const path = require('path');
-
-const PDF_SAVE_DIR = process.env.PDF_SAVE_DIR || 'C:\\NavyakarPDFs';
+const cloudinary = require('../config/cloudinary');
 
 // ── Create table on startup ──────────────────────────────────────────────
 db.query(`
@@ -25,8 +24,10 @@ router.get('/:projectId', async(req, res) => {
         const { type } = req.query; // ?type=invoice or ?type=quotation
         let sql = 'SELECT * FROM pdf_downloads WHERE project_id=?';
         const args = [req.params.projectId];
-        if (type) { sql += ' AND pdf_type=?';
-            args.push(type); }
+        if (type) {
+            sql += ' AND pdf_type=?';
+            args.push(type);
+        }
         sql += ' ORDER BY downloaded_at DESC LIMIT 50';
         const [rows] = await db.query(sql, args);
         res.json(rows);
@@ -40,11 +41,34 @@ router.get('/view/:id', async(req, res) => {
             [log]
         ] = await db.query('SELECT * FROM pdf_downloads WHERE id=?', [req.params.id]);
         if (!log) return res.status(404).json({ error: 'Log not found' });
-        if (!log.file_path || !fs.existsSync(log.file_path))
-            return res.status(404).json({ error: 'PDF file not found on disk. Re-download to regenerate.' });
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'inline');
-        fs.createReadStream(log.file_path).pipe(res);
+
+        // ✅ No file_path — redirect to live preview instead
+        if (!log.file_path) {
+            const previewRoute = log.pdf_type === 'quotation' ?
+                `/api/quotation-pdf/${log.project_id}?preview=1` :
+                `/api/pdf/${log.project_id}?preview=1`;
+            return res.redirect(previewRoute);
+        }
+
+        // ✅ Cloudinary URL — fetch and serve inline
+        if (log.file_path.startsWith('http')) {
+            const fetch = (await
+                import ('node-fetch')).default;
+            const response = await fetch(log.file_path);
+            if (!response.ok) return res.status(404).json({ error: 'Could not fetch PDF from Cloudinary.' });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'inline');
+            return response.body.pipe(res);
+        }
+
+        // ✅ Legacy local file
+        if (fs.existsSync(log.file_path)) {
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', 'inline');
+            return fs.createReadStream(log.file_path).pipe(res);
+        }
+
+        return res.status(404).json({ error: 'PDF file not found. Re-download to regenerate.' });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

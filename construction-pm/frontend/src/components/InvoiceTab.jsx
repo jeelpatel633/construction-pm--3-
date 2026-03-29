@@ -112,9 +112,9 @@ export default function InvoiceTab({ project, archTotal, contTotal, onProjectUpd
   const handleSave = async () => { isDirty.current = true; await saveAll(); };
 
   // ✅ Download + log
-  const downloadPdf = async () => {
+const downloadPdf = async () => {
+    isDirty.current = true;
     await saveAll();
-    // ✅ Log first, get id back, show View immediately
     try {
       const res = await axios.post('/api/download-logs', {
         project_id:   project.id,
@@ -122,11 +122,14 @@ export default function InvoiceTab({ project, archTotal, contTotal, onProjectUpd
         project_name: project.project_name,
         pdf_type:     'invoice',
       });
-      setDlLogs(prev => [res.data, ...prev]); // res.data has id + file_path after save
-    } catch(e) { console.error(e); }
-    window.open(`/api/pdf/${project.id}`, '_blank');
+      setDlLogs(prev => [res.data, ...prev]);
+      window.open(`/api/pdf/${project.id}?logId=${res.data.id}`, '_blank');
+    } catch(e) {
+      console.error(e);
+      window.open(`/api/pdf/${project.id}`, '_blank');
+    }
   };
-
+  
   const previewPdf = async () => {
     setPreviewing(true);
     try {
