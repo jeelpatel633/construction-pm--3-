@@ -542,7 +542,7 @@ const downloadPdf = async () => {
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <div style={{ width:36, height:36, borderRadius:10, background:'#F97316', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18 }}>🧾</div>
             <div>
-              <div style={{ color:'#fff', fontWeight:700, fontSize:14 }}>Invoice Details</div>
+              <div style={{ color:'#fff', fontWeight:700, fontSize:14 }}>Quotation Details</div>
               <div style={{ color:'#94A3B8', fontSize:11, marginTop:1 }}>Auto-saved when you make changes</div>
             </div>
           </div>
@@ -553,14 +553,14 @@ const downloadPdf = async () => {
         </div>
         <div style={{ padding:'20px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:0.8 }}>Invoice Number</label>
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:0.8 }}>Quotation Number</label>
             <div style={{ position:'relative' }}>
               <span style={{ position:'absolute', left:12, top:'50%', transform:'translateY(-50%)', fontSize:13, color:'#94A3B8', pointerEvents:'none' }}>#</span>
               <input className="form-input" value={meta.invoice_number} onChange={e=>setM('invoice_number',e.target.value)} placeholder={`QUO-${project.id}`} style={{ paddingLeft:28, fontWeight:600, fontSize:14 }} />
             </div>
           </div>
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:0.8 }}>Invoice Date</label>
+            <label style={{ fontSize:11, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:0.8 }}>Quotation Date</label>
             <input className="form-input" type="date" value={meta.invoice_date} onChange={e=>setM('invoice_date',e.target.value)} style={{ fontWeight:600, fontSize:14 }} />
           </div>
         </div>
