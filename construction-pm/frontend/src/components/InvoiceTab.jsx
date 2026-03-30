@@ -78,7 +78,18 @@ export default function InvoiceTab({ project, archTotal, contTotal, onProjectUpd
   const balance    = totalBill - totalPaid;
   const commEarned = parseFloat((totalBill * n(commission) / 100).toFixed(2));
 
-  const addStmt    = () => { if (!newStmt.trim()) return; setStmts(p => [...p, {id:Date.now(), statement:newStmt.trim()}]); setNewStmt(''); markDirty(); };
+  const addStmt = () => {
+    const trimmed = newStmt.trim();
+    if (!trimmed) return;
+    const alreadyExists = stmts.some(s => s.statement.toLowerCase() === trimmed.toLowerCase());
+    if (alreadyExists) {
+      alert('This statement is already added');
+      return;
+    }
+    setStmts(p => [...p, { id: Date.now(), statement: trimmed }]);
+    setNewStmt('');
+    markDirty();
+  };
   const removeStmt = id => { setStmts(p => p.filter(s => s.id !== id)); markDirty(); };
 
   const saveAll = async () => {
@@ -210,7 +221,15 @@ const downloadPdf = async () => {
             <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
               {TEMPLATES.map(t => (
                 <button key={t} className="btn btn-outline btn-sm" style={{fontSize:11}}
-                  onClick={() => { setStmts(p => [...p, {id:Date.now(), statement:t}]); markDirty(); }}>
+                      onClick={() => {
+                      const exists = stmts.some(s => s.statement.toLowerCase() === t.toLowerCase());
+                      if (exists) {
+                        alert('This statement is already added');
+                        return;
+                      }
+                      setStmts(p => [...p, { id: Date.now(), statement: t }]);
+                      markDirty();
+                    }}>
                   + {t.slice(0,40)}{t.length>40?'…':''}
                 </button>
               ))}

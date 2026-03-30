@@ -425,13 +425,28 @@ export default function QuotationTab({ project }) {
     triggerAutoSave(updated);
   };
 
-  const addStmt = async () => {
-    if (!newStmt.trim()) return;
-    const updated = [...stmts, { id: Date.now(), statement: newStmt.trim() }];
-    setStmts(updated);
-    setNewStmt('');
-    await axios.post(`/api/quotation-statements/bulk/${project.id}`, { statements: updated.map(s => s.statement) }).catch(console.error);
-  };
+const addStmt = async () => {
+  const trimmed = newStmt.trim();
+  if (!trimmed) return;
+
+  // ✅ Prevent duplicate (case-insensitive)
+  const alreadyExists = stmts.some(
+    s => s.statement.toLowerCase() === trimmed.toLowerCase()
+  );
+
+  if (alreadyExists) {
+    alert('This statement is already added');
+    return;
+  }
+
+  const updated = [...stmts, { id: Date.now(), statement: trimmed }];
+  setStmts(updated);
+  setNewStmt('');
+
+  await axios.post(`/api/quotation-statements/bulk/${project.id}`, {
+    statements: updated.map(s => s.statement)
+  }).catch(console.error);
+};
   const removeStmt = async id => {
     const updated = stmts.filter(s => s.id !== id);
     setStmts(updated);
