@@ -448,8 +448,8 @@ router.get('/:projectId', async(req, res) => {
                                                 margin: [18, 11, 40, 11],
                                                 stack: [
                                                     { text: 'FOLLOW US', fontSize: 6, bold: true, color: ORANGE, characterSpacing: 1.5, margin: [0, 0, 0, 5] },
-                                                    { text: [{ text: 'IG  ', fontSize: 6.5, bold: true, color: ORANGE }, { text: '@navyakar', fontSize: 7, color: WHITE }], margin: [0, 0, 0, 3] },
-                                                    { text: [{ text: 'FB  ', fontSize: 6.5, bold: true, color: ORANGE }, { text: '@navyakar', fontSize: 7, color: WHITE }] },
+                                                    { text: [{ text: 'IG  ', fontSize: 6.5, bold: true, color: ORANGE }, { text: '@navyakar', fontSize: 7, color: WHITE, link: 'https://www.instagram.com/navyakar.studio/' }], margin: [0, 0, 0, 3] },
+                                                    { text: [{ text: 'FB  ', fontSize: 6.5, bold: true, color: ORANGE }, { text: '@navyakar', fontSize: 7, color: WHITE, link: 'https://www.facebook.com/share/1Q6EnNxFqM/' }] },
                                                 ]
                                             },
                                         ],
