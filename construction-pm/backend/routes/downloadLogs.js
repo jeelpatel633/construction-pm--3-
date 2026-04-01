@@ -83,33 +83,35 @@ router.get('/view/:id', async(req, res) => {
         ] = await db.query('SELECT * FROM pdf_downloads WHERE id=?', [req.params.id]);
         if (!log) return res.status(404).json({ error: 'Log not found' });
 
-        // ✅ No file_path — redirect to live preview instead
-        if (!log.file_path) {
-            const previewRoute = log.pdf_type === 'quotation' ?
-                `/api/quotation-pdf/${log.project_id}?preview=1` :
-                `/api/pdf/${log.project_id}?preview=1`;
-            return res.redirect(previewRoute);
-        }
-
-        // ✅ Cloudinary URL — fetch and serve inline
-        if (log.file_path.startsWith('http')) {
+        // ✅ Has Cloudinary URL — fetch and serve inline
+        if (log.file_path && log.file_path.startsWith('http')) {
             const fetch = (await
                 import ('node-fetch')).default;
             const response = await fetch(log.file_path);
-            if (!response.ok) return res.status(404).json({ error: 'Could not fetch PDF from Cloudinary.' });
-            res.setHeader('Content-Type', 'application/pdf');
-            res.setHeader('Content-Disposition', 'inline');
-            return response.body.pipe(res);
+            if (!response.ok) {
+                // Cloudinary fetch failed — fall through to regenerate
+                console.error('Cloudinary fetch failed:', log.file_path);
+            } else {
+                res.setHeader('Content-Type', 'application/pdf');
+                res.setHeader('Content-Disposition', 'inline');
+                return response.body.pipe(res);
+            }
         }
 
         // ✅ Legacy local file
-        if (fs.existsSync(log.file_path)) {
+        if (log.file_path && fs.existsSync(log.file_path)) {
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', 'inline');
             return fs.createReadStream(log.file_path).pipe(res);
         }
 
-        return res.status(404).json({ error: 'PDF file not found. Re-download to regenerate.' });
+        // ✅ No file_path or fetch failed — regenerate using absolute backend URL
+        const baseUrl = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).replace('http://', 'https://');
+        const previewUrl = log.pdf_type === 'quotation' ?
+            `${baseUrl}/api/quotation-pdf/${log.project_id}?preview=1` :
+            `${baseUrl}/api/pdf/${log.project_id}?preview=1`;
+        return res.redirect(previewUrl);
+
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

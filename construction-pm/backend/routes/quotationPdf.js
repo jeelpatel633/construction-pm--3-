@@ -666,15 +666,19 @@ router.get('/:projectId', async(req, res) => {
                 res.end(buf);
                 // ✅ Upload to Cloudinary in background
                 uploadToCloudinary(buf, savedName)
-                    .then(url => {
+                    .then(async url => {
+                        console.log('✅ Cloudinary upload success:', url);
                         if (logId) {
-                            return db.query("UPDATE pdf_downloads SET file_path=? WHERE id=?", [url, logId]);
+                            await db.query("UPDATE pdf_downloads SET file_path=? WHERE id=?", [url, logId]);
+                            console.log('✅ DB updated for logId:', logId);
+                        } else {
+                            await db.query(
+                                "UPDATE pdf_downloads SET file_path=? WHERE project_id=? AND pdf_type='quotation' ORDER BY downloaded_at DESC LIMIT 1", [url, pid]
+                            );
+                            console.log('✅ DB updated for project:', pid);
                         }
-                        return db.query(
-                            "UPDATE pdf_downloads SET file_path=? WHERE project_id=? AND pdf_type='quotation' ORDER BY downloaded_at DESC LIMIT 1", [url, pid]
-                        );
                     })
-                    .catch(e => console.error('Cloudinary upload error:', e.message));
+                    .catch(e => console.error('❌ Cloudinary/DB error:', e.message, e.stack));
             });
             pdfDoc.on('error', err => { if (!res.headersSent) res.status(500).json({ error: err.message }); });
             pdfDoc.end();
