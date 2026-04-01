@@ -371,7 +371,8 @@ export default function QuotationTab({ project }) {
 const [dlLogs,       setDlLogs]       = useState([]);
 const [stmts,        setStmts]        = useState([]);
 const [newStmt,      setNewStmt]      = useState('');
-const [waPopup,      setWaPopup]      = useState(null); // WhatsApp popup log data
+const [waPopup,      setWaPopup]      = useState(null);
+const [waSending,    setWaSending]    = useState(false);
 
   const isDirtySig    = useRef(false);
   const autoSaveTimer = useRef(null);
@@ -554,6 +555,8 @@ const downloadPdf = async () => {
 
 // ✅ WhatsApp send function
 const sendWhatsApp = async (log) => {
+    if (waSending) return; // prevent double click
+    setWaSending(true);
     try {
       // ✅ Backend retries until Cloudinary URL is ready
       const { data } = await axios.get(`/api/download-logs/whatsapp/${log.id}`);
@@ -597,6 +600,8 @@ const sendWhatsApp = async (log) => {
     } catch(e) {
       console.error(e);
       alert('Could not open WhatsApp. Please try again.');
+    } finally {
+      setWaSending(false);
     }
   };
 
@@ -618,9 +623,9 @@ const sendWhatsApp = async (log) => {
                 style={{flex:1,padding:'10px',borderRadius:8,border:'1px solid #CBD5E1',background:'#F8FAFC',color:'#64748B',fontWeight:600,cursor:'pointer',fontSize:14}}>
                 Cancel
               </button>
-              <button onClick={() => sendWhatsApp(waPopup)}
-                style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:'#25D366',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:14}}>
-                📱 Open WhatsApp
+              <button onClick={() => sendWhatsApp(waPopup)} disabled={waSending}
+                style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:waSending?'#86efac':'#25D366',color:'#fff',fontWeight:700,cursor:waSending?'not-allowed':'pointer',fontSize:14,transition:'all 0.2s'}}>
+                {waSending ? '⏳ Preparing...' : '📱 Open WhatsApp'}
               </button>
             </div>
           </div>
