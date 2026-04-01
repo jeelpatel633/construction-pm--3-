@@ -6,6 +6,7 @@ const BLANK = { client_name: '', phone: '', email: '', address: '', notes: '' };
 export default function ClientModal({ client, onClose, onSaved, toast }) {
   const [f, setF]     = useState(BLANK);
   const [busy, setBusy] = useState(false);
+  const [phoneError, setPhoneError] = useState('');
 
   useEffect(() => {
     if (client) setF({ client_name: client.client_name||'', phone: client.phone||'', email: client.email||'', address: client.address||'', notes: client.notes||'' });
@@ -16,6 +17,7 @@ export default function ClientModal({ client, onClose, onSaved, toast }) {
 
   const save = async () => {
     if (!f.client_name.trim()) { toast('Client name is required', 'error'); return; }
+    if (f.phone.startsWith('+91')) { toast('Remove +91 from phone number', 'error'); return;}
     setBusy(true);
     try {
       client ? await axios.put(`/api/clients/${client.id}`, f) : await axios.post('/api/clients', f);
@@ -25,7 +27,11 @@ export default function ClientModal({ client, onClose, onSaved, toast }) {
   };
 
   return (
-    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="overlay" onMouseDown={e => {
+  if (e.target === e.currentTarget) {
+    onClose();
+  }
+}}>
       <div className="modal">
         <div className="modal-hd">
           <div className="modal-title">{client ? 'Edit Client' : 'New Client'}</div>
@@ -39,7 +45,34 @@ export default function ClientModal({ client, onClose, onSaved, toast }) {
           <div className="modal-grid2">
             <div className="form-col">
               <label className="form-lbl">Phone</label>
-              <input className="form-input" value={f.phone} onChange={e => set('phone', e.target.value)} placeholder="98XXXXXXXX" />
+              <input
+                className="form-input"
+                value={f.phone}
+                onChange={e => {
+                const raw = e.target.value;
+                let val = raw.replace(/[^0-9]/g, '');
+
+                if (raw && raw !== val) {
+                  setPhoneError('❌ Enter direct number (no +91 or special chars)');
+                } else {
+                  setPhoneError('');
+                }
+                set('phone', val);
+              }}
+                placeholder="98XXXXXXXX"
+              />
+              {phoneError && (
+              <div style={{
+                color: '#ef4444',
+                fontSize: '12px',
+                marginTop: '4px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>
+                {phoneError}
+              </div>
+              )}
             </div>
             <div className="form-col">
               <label className="form-lbl">Email</label>

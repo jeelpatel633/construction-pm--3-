@@ -368,9 +368,10 @@ export default function QuotationTab({ project }) {
   const [sigSaving,    setSigSaving]    = useState(false);
   const [sigSaved,     setSigSaved]     = useState(false);
 
-  const [dlLogs,       setDlLogs]       = useState([]);
-  const [stmts,        setStmts]        = useState([]);
-  const [newStmt,      setNewStmt]      = useState('');
+const [dlLogs,       setDlLogs]       = useState([]);
+const [stmts,        setStmts]        = useState([]);
+const [newStmt,      setNewStmt]      = useState('');
+const [waPopup,      setWaPopup]      = useState(null); // WhatsApp popup log data
 
   const isDirtySig    = useRef(false);
   const autoSaveTimer = useRef(null);
@@ -528,10 +529,13 @@ const downloadPdf = async () => {
         client_name:  project.client_name,
         project_name: project.project_name,
         pdf_type:     'quotation',
+        total_amount: total, // ✅ save total amount
       });
-      setDlLogs(prev => [res.data, ...prev]);
-      // ✅ Pass log ID so correct record gets updated
-      window.open(`/api/quotation-pdf/${project.id}?logId=${res.data.id}`, '_blank');
+      const logData = res.data;
+      setDlLogs(prev => [logData, ...prev]);
+      window.open(`/api/quotation-pdf/${project.id}?logId=${logData.id}`, '_blank');
+      // ✅ Show WhatsApp popup after short delay (let PDF open first)
+      setTimeout(() => setWaPopup(logData), 500);
     } catch(e) {
       console.error(e);
       window.open(`/api/quotation-pdf/${project.id}`, '_blank');
@@ -548,8 +552,80 @@ const downloadPdf = async () => {
     finally { setPreviewLoading(false); }
   };
 
+// ✅ WhatsApp send function
+const sendWhatsApp = async (log) => {
+    try {
+      // ✅ Backend retries until Cloudinary URL is ready
+      const { data } = await axios.get(`/api/download-logs/whatsapp/${log.id}`);
+      const phone = data.phone ? data.phone.replace(/\D/g, '') : null;
+      if (!phone) { alert('No phone number found for this client!'); return; }
+
+      // ✅ Use resolved_pdf_url from backend (always correct, never localhost)
+      const pdfLink = data.resolved_pdf_url;
+
+      const amount = data.total_amount
+        ? '₹' + parseFloat(data.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+        : '';
+
+      const date = new Date(data.downloaded_at).toLocaleDateString('en-IN', {
+        day: '2-digit', month: 'short', year: 'numeric'
+      });
+
+      // ✅ Professional message
+      const message = [
+        `Hello ${data.client_name}! 👋`,
+        ``,
+        `Your *Quotation* from *Navyakar* is ready.`,
+        ``,
+        `🏗️ *Project:* ${data.project_name}`,
+        `${amount ? `💰 *Total Amount:* ${amount}` : ''}`,
+        `📅 *Date:* ${date}`,
+        ``,
+        `📄 *Download your Quotation PDF:*`,
+        `${pdfLink}`,
+        ``,
+        `_Valid for 30 days from date of issue._`,
+        `_For queries, call: *+91 99242 81746*_`,
+        ``,
+        `— *Dhaval Mevada*`,
+        `*Navyakar | Building Dreams, Crafting Reality* 🏠`,
+      ].filter(line => line !== null && !(line === '' && false)).join('\n');
+
+      const waUrl = `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`;
+      window.open(waUrl, '_blank');
+      setWaPopup(null);
+    } catch(e) {
+      console.error(e);
+      alert('Could not open WhatsApp. Please try again.');
+    }
+  };
+
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
+
+      {/* ✅ WhatsApp Popup */}
+      {waPopup && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:16,padding:28,maxWidth:420,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+            <div style={{fontSize:24,marginBottom:8,textAlign:'center'}}>📱</div>
+            <div style={{fontWeight:700,fontSize:16,color:'#1E293B',textAlign:'center',marginBottom:6}}>Send on WhatsApp?</div>
+            <div style={{fontSize:13,color:'#64748B',textAlign:'center',marginBottom:20}}>
+              Send quotation PDF link to <strong>{waPopup.client_name}</strong>
+              {waPopup.total_amount && <span> · ₹{parseFloat(waPopup.total_amount).toLocaleString('en-IN')}</span>}
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={() => setWaPopup(null)}
+                style={{flex:1,padding:'10px',borderRadius:8,border:'1px solid #CBD5E1',background:'#F8FAFC',color:'#64748B',fontWeight:600,cursor:'pointer',fontSize:14}}>
+                Cancel
+              </button>
+              <button onClick={() => sendWhatsApp(waPopup)}
+                style={{flex:2,padding:'10px',borderRadius:8,border:'none',background:'#25D366',color:'#fff',fontWeight:700,cursor:'pointer',fontSize:14}}>
+                📱 Open WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Invoice Details Card ── */}
       <div className="card" style={{ overflow:'hidden' }}>
@@ -847,6 +923,12 @@ const downloadPdf = async () => {
                     <button onClick={() => window.open(`/api/download-logs/view/${log.id}`, '_blank')}
                       style={{fontSize:11,fontWeight:600,color:'#2563EB',background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'3px 10px',cursor:'pointer'}}>
                       👁️ View
+                    </button>
+                  )}
+                  {log.id && (
+                    <button onClick={() => setWaPopup(log)}
+                      style={{fontSize:11,fontWeight:600,color:'#16A34A',background:'#F0FDF4',border:'1px solid #BBF7D0',borderRadius:6,padding:'3px 10px',cursor:'pointer'}}>
+                      📱 WhatsApp
                     </button>
                   )}
                   <span style={{fontSize:11,fontWeight:600,color:'var(--success)',background:'#F0FDF4',padding:'2px 8px',borderRadius:20,border:'1px solid #BBF7D0'}}>✓ Sent</span>

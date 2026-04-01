@@ -34,6 +34,44 @@ router.get('/:projectId', async(req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ✅ GET log with client phone for WhatsApp
+router.get('/whatsapp/:id', async(req, res) => {
+    try {
+        // ✅ Retry up to 5 times waiting for Cloudinary upload to complete
+        let log = null;
+        for (let attempt = 0; attempt < 5; attempt++) {
+            const [
+                [row]
+            ] = await db.query(`
+                SELECT d.*, c.phone
+                FROM pdf_downloads d
+                JOIN projects p ON p.id = d.project_id
+                JOIN clients c ON c.id = p.client_id
+                WHERE d.id = ?
+            `, [req.params.id]);
+            if (row && row.file_path && row.file_path.startsWith('http')) {
+                log = row;
+                break;
+            }
+            if (attempt === 0) log = row; // save first result as fallback
+            // Wait 1 second before retrying
+            await new Promise(r => setTimeout(r, 1000));
+        }
+
+        if (!log) return res.status(404).json({ error: 'Log not found' });
+
+        // ✅ Build correct PDF URL
+        const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+        const pdfUrl = (log.file_path && log.file_path.startsWith('http')) ?
+            log.file_path :
+            log.pdf_type === 'quotation' ?
+            `${baseUrl}/api/quotation-pdf/${log.project_id}?preview=1` :
+            `${baseUrl}/api/pdf/${log.project_id}?preview=1`;
+
+        res.json({...log, resolved_pdf_url: pdfUrl });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ✅ Serve a saved PDF file inline by log ID
 router.get('/view/:id', async(req, res) => {
     try {
@@ -75,9 +113,9 @@ router.get('/view/:id', async(req, res) => {
 // POST — log a download (file_path saved by pdf/quotationPdf routes directly)
 router.post('/', async(req, res) => {
     try {
-        const { project_id, client_name, project_name, pdf_type, file_path } = req.body;
+        const { project_id, client_name, project_name, pdf_type, file_path, total_amount } = req.body;
         const [r] = await db.query(
-            'INSERT INTO pdf_downloads (project_id, client_name, project_name, pdf_type, file_path) VALUES (?,?,?,?,?)', [project_id, client_name || '', project_name || '', pdf_type || 'invoice', file_path || '']
+            'INSERT INTO pdf_downloads (project_id, client_name, project_name, pdf_type, file_path, total_amount) VALUES (?,?,?,?,?,?)', [project_id, client_name || '', project_name || '', pdf_type || 'invoice', file_path || '', total_amount || null]
         );
         const [
             [row]
