@@ -49,19 +49,22 @@ router.get('/whatsapp/:id', async(req, res) => {
                 JOIN clients c ON c.id = p.client_id
                 WHERE d.id = ?
             `, [req.params.id]);
-            if (row && row.file_path && row.file_path.startsWith('http')) {
+            const hasCloudinaryUrl = row && row.file_path && row.file_path.startsWith('http');
+            if (attempt === 0) log = row; // always save first result as fallback
+            if (hasCloudinaryUrl) {
                 log = row;
-                break;
+                break; // ✅ Got Cloudinary URL — stop immediately
             }
-            if (attempt === 0) log = row; // save first result as fallback
-            // Wait 1 second before retrying
+            // ✅ Only retry if file_path is genuinely still pending (null)
+            // If it's empty string, Cloudinary upload failed — don't waste time retrying
+            if (!row || row.file_path !== null) break;
             await new Promise(r => setTimeout(r, 1000));
         }
 
         if (!log) return res.status(404).json({ error: 'Log not found' });
 
         // ✅ Build correct PDF URL
-        const baseUrl = process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
+        const baseUrl = (process.env.BACKEND_URL || `${req.protocol}://${req.get('host')}`).replace('http://', 'https://');
         const pdfUrl = (log.file_path && log.file_path.startsWith('http')) ?
             log.file_path :
             log.pdf_type === 'quotation' ?
@@ -115,7 +118,7 @@ router.post('/', async(req, res) => {
     try {
         const { project_id, client_name, project_name, pdf_type, file_path, total_amount } = req.body;
         const [r] = await db.query(
-            'INSERT INTO pdf_downloads (project_id, client_name, project_name, pdf_type, file_path, total_amount) VALUES (?,?,?,?,?,?)', [project_id, client_name || '', project_name || '', pdf_type || 'invoice', file_path || '', total_amount || null]
+            'INSERT INTO pdf_downloads (project_id, client_name, project_name, pdf_type, file_path, total_amount) VALUES (?,?,?,?,?,?)', [project_id, client_name || '', project_name || '', pdf_type || 'invoice', file_path || null, total_amount || null]
         );
         const [
             [row]
