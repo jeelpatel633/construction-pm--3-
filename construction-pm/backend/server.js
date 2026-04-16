@@ -41,4 +41,13 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.get('/', (_req, res) => res.json({ status: 'ConstructPro API v3' }));
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`✅ API → http://localhost:${PORT}`));
+
+app.listen(PORT, () => {
+    console.log(`✅ API → http://localhost:${PORT}`);
+    // ✅ Self-ping every 10 min — prevents Render free tier sleep
+    setInterval(() => {
+        fetch('https://navyakar-api.onrender.com/health')
+            .then(() => console.log('🏓 keep-alive ok'))
+            .catch(e => console.log('🏓 ping failed:', e.message));
+    }, 10 * 60 * 1000); // 10 minutes
+});
