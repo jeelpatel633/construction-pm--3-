@@ -37,31 +37,6 @@ app.use('/api/quotation-poc', require('./routes/quotationPocImages'));
 app.use('/api/cash-expenses', require('./routes/cashExpenses'));
 app.use('/api/vendor-bills', require('./routes/vendorBills')); // ← ADD
 
-app.get('/seed', async(req, res) => {
-    if (req.query.secret !== process.env.SEED_SECRET) {
-        return res.status(403).json({ error: 'Forbidden' });
-    }
-    try {
-        const bcrypt = require('bcryptjs');
-        const db = require('./config/db');
-
-        const adminHash = await bcrypt.hash('navyakar@2026', 10);
-        await db.query(`INSERT IGNORE INTO users (username, password_hash, role, display_name) VALUES (?, ?, 'admin', 'Admin')`, ['admin', adminHash]);
-
-        const dhavalHash = await bcrypt.hash('dhaval@2026', 10);
-        await db.query(`INSERT IGNORE INTO users (username, password_hash, role, display_name) VALUES (?, ?, 'user', 'Dhaval Mevada')`, ['dhaval', dhavalHash]);
-
-        const [
-            [dhaval]
-        ] = await db.query(`SELECT id FROM users WHERE username = 'dhaval'`);
-        await db.query(`UPDATE clients SET user_id = ? WHERE user_id IS NULL`, [dhaval.id]);
-
-        res.json({ success: true, message: '🎉 Seeded successfully!' });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-
 app.get('/health', (_req, res) => res.json({ ok: true })); // already exists
 app.get('/', (_req, res) => res.json({ status: 'ConstructPro API v3' }));
 

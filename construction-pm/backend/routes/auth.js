@@ -76,7 +76,7 @@ router.get('/users', authMW, async(req, res) => {
         return res.status(403).json({ error: 'Admin only' });
     try {
         const [rows] = await db.query(
-            `SELECT id, username, display_name, created_at FROM users WHERE role = 'user' ORDER BY created_at ASC`
+            `SELECT id, username, display_name, created_at FROM users WHERE role IN ('user', 'admin') ORDER BY created_at ASC`
         );
         res.json(rows);
     } catch (e) { res.status(500).json({ error: e.message }); }
