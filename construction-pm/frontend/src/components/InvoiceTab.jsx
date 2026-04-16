@@ -29,7 +29,7 @@ function compressImage(file) {
   });
 }
 
-export default function InvoiceTab({ project, archTotal, contTotal, onProjectUpdated }) {
+export default function InvoiceTab({ project, archTotal, contTotal, onProjectUpdated, pdfUrl = u => u }) {
   const [stmts,       setStmts]       = useState([]);
   const [newStmt,     setNewStmt]     = useState('');
   const [invNotes,    setInvNotes]    = useState(project.invoice_notes  || '');
@@ -138,12 +138,12 @@ const downloadPdf = async () => {
       });
       const logData = res.data;
       setDlLogs(prev => [logData, ...prev]);
-      window.open(`/api/pdf/${project.id}?logId=${logData.id}`, '_blank');
+      window.open(pdfUrl(`/api/pdf/${project.id}?logId=${logData.id}`), '_blank');
       // ✅ Show WhatsApp popup after short delay
       setTimeout(() => setWaPopup(logData), 500);
     } catch(e) {
       console.error(e);
-      window.open(`/api/pdf/${project.id}`, '_blank');
+      window.open(pdfUrl(`/api/pdf/${project.id}`), '_blank');
     }
   };
   
@@ -151,7 +151,7 @@ const downloadPdf = async () => {
     setPreviewing(true);
     try {
       await saveAll();
-      window.open(`/api/pdf/${project.id}?preview=1&t=${Date.now()}`, '_blank');
+      window.open(pdfUrl(`/api/pdf/${project.id}?preview=1&t=${Date.now()}`), '_blank');
     } catch(e) {
       alert('Preview failed. Try Download.');
     } finally {
@@ -443,7 +443,7 @@ const sendWhatsApp = async (log) => {
               <div style={{display:'flex',gap:8,alignItems:'center'}}>
                 {log.id && (
                   <button
-                    onClick={() => window.open(`/api/download-logs/view/${log.id}`, '_blank')}
+                    onClick={() => window.open(pdfUrl(`/api/download-logs/view/${log.id}`), '_blank')}
                     style={{fontSize:11,fontWeight:600,color:'#2563EB',background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'3px 10px',cursor:'pointer'}}>
                     👁️ View
                   </button>

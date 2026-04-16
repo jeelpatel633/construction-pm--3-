@@ -36,6 +36,7 @@
     --radius-xl: 16px;
     --font: 'Plus Jakarta Sans', sans-serif;
     --font-mono: 'DM Mono', monospace;
+    --sidebar-w: 268px;
 }
 
 html,
@@ -75,20 +76,35 @@ body,
     display: flex;
     height: 100vh;
     overflow: hidden;
+    position: relative;
+}
+
+.sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 199;
+}
+
+.sidebar-backdrop.visible {
+    display: block;
 }
 
 
 /* ══ Sidebar ════════════════════════════════════════════════════════════ */
 
 .sidebar {
-    width: 268px;
-    min-width: 268px;
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
     background: var(--primary-dk);
     display: flex;
     flex-direction: column;
+    height: 100vh;
     overflow: hidden;
     flex-shrink: 0;
-    transition: width 0.25s ease, min-width 0.25s ease;
+    transition: transform 0.25s ease, width 0.25s ease, min-width 0.25s ease;
+    z-index: 200;
 }
 
 .sidebar.collapsed {
@@ -99,6 +115,7 @@ body,
 .sidebar-brand {
     padding: 20px 16px 14px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    flex-shrink: 0;
 }
 
 .brand-row {
@@ -135,6 +152,7 @@ body,
 
 .sidebar-search {
     padding: 12px 12px 8px;
+    flex-shrink: 0;
 }
 
 .search-wrap {
@@ -174,6 +192,7 @@ body,
 
 .sidebar-add {
     padding: 6px 12px 10px;
+    flex-shrink: 0;
 }
 
 .btn-add-client {
@@ -206,6 +225,7 @@ body,
     flex: 1;
     overflow-y: auto;
     padding: 4px 0 12px;
+    min-height: 0;
 }
 
 .client-item {
@@ -287,19 +307,16 @@ body,
     flex-direction: column;
     overflow: hidden;
     position: relative;
-    /* required for absolute toggle button */
+    min-width: 0;
 }
-
-
-/* Toggle button — absolutely positioned inside .main, never overlaps sidebar */
 
 .sidebar-toggle {
     position: absolute;
     top: 14px;
     left: 14px;
     z-index: 100;
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     background: var(--accent);
     border: none;
     border-radius: 8px;
@@ -318,9 +335,6 @@ body,
     background: var(--accent-h);
 }
 
-
-/* Inner content wrapper — scrollable, padded to clear the toggle button */
-
 .main-inner {
     flex: 1;
     overflow-y: auto;
@@ -330,7 +344,7 @@ body,
 }
 
 
-/* ══ Welcome screen ══════════════════════════════════════════════════════ */
+/* ══ Welcome ══════════════════════════════════════════════════════════════ */
 
 .welcome {
     flex: 1;
@@ -340,6 +354,8 @@ body,
     justify-content: center;
     gap: 14px;
     color: var(--text-3);
+    padding: 24px;
+    text-align: center;
 }
 
 .welcome-icon {
@@ -363,14 +379,10 @@ body,
 .project-view {
     padding: 24px;
     padding-top: 60px;
-    /* clears the 32px toggle button + 14px top + gap */
     display: flex;
     flex-direction: column;
     gap: 20px;
 }
-
-
-/* ══ Top bar ═════════════════════════════════════════════════════════════ */
 
 .top-bar {
     display: flex;
@@ -430,7 +442,7 @@ body,
 }
 
 
-/* ══ Status badge ════════════════════════════════════════════════════════ */
+/* ══ Badge ════════════════════════════════════════════════════════════════ */
 
 .badge {
     display: inline-flex;
@@ -572,6 +584,8 @@ body,
     border-radius: var(--radius-lg);
     padding: 4px;
     box-shadow: var(--shadow-sm);
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .tab-btn {
@@ -591,6 +605,7 @@ body,
     gap: 5px;
     transition: all 0.15s;
     white-space: nowrap;
+    min-width: fit-content;
 }
 
 .tab-btn:hover {
@@ -622,6 +637,8 @@ body,
     align-items: center;
     justify-content: space-between;
     background: var(--surface-2);
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .card-title {
@@ -648,6 +665,7 @@ body,
 
 .table-wrap {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
 .tbl {
@@ -728,9 +746,6 @@ body,
     font-style: italic;
     font-size: 13px;
 }
-
-
-/* Note cell hover tooltip */
 
 .note-cell {
     position: relative;
@@ -836,6 +851,36 @@ body,
     justify-content: flex-end;
     gap: 8px;
     grid-column: 1 / -1;
+}
+
+
+/* ══ Responsive grid classes — DESKTOP base values ═══════════════════════
+   These MUST be outside any media query so desktop gets the wide layouts.
+   Mobile overrides are in the @media block below.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.cash-summary-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+}
+
+.cash-form-row3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+}
+
+.cash-form-row2 {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+}
+
+.payment-form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr 2fr;
+    gap: 12px;
 }
 
 
@@ -968,6 +1013,7 @@ body,
     justify-content: center;
     z-index: 1000;
     animation: ov .15s ease;
+    padding: 16px;
 }
 
 @keyframes ov {
@@ -1092,7 +1138,7 @@ body,
 }
 
 
-/* ══ Invoice tab ══════════════════════════════════════════════════════════ */
+/* ══ Invoice / calc ══════════════════════════════════════════════════════ */
 
 .invoice-layout {
     display: flex;
@@ -1318,4 +1364,180 @@ body,
 
 .toast.info {
     border-left: 3px solid var(--accent);
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MOBILE — max-width: 768px
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        height: 100vh;
+        width: 280px !important;
+        min-width: 280px !important;
+        transform: translateX(-100%);
+        transition: transform 0.28s ease;
+        z-index: 200;
+        box-shadow: 4px 0 24px rgba(0, 0, 0, 0.35);
+    }
+    .sidebar.mobile-open {
+        transform: translateX(0);
+    }
+    .sidebar.collapsed {
+        width: 280px !important;
+        min-width: 280px !important;
+        transform: translateX(-100%);
+    }
+    .sidebar.collapsed.mobile-open {
+        transform: translateX(0);
+    }
+    .main {
+        width: 100%;
+        flex: 1;
+    }
+    .sidebar-toggle {
+        width: 40px;
+        height: 40px;
+        top: 12px;
+        left: 12px;
+        font-size: 16px;
+    }
+    .project-view {
+        padding: 16px;
+        padding-top: 64px;
+        gap: 14px;
+    }
+    .top-bar {
+        flex-direction: column;
+        gap: 12px;
+    }
+    .top-bar-actions {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+    .top-bar-actions .btn {
+        flex: 1;
+        justify-content: center;
+        min-width: 0;
+    }
+    .proj-title {
+        font-size: 20px;
+    }
+    .summary-row {
+        grid-template-columns: 1fr;
+        gap: 10px;
+    }
+    .sum-val {
+        font-size: 18px;
+    }
+    .tabs {
+        border-radius: var(--radius);
+        padding: 3px;
+    }
+    .tab-btn {
+        font-size: 11px;
+        padding: 8px 8px;
+        gap: 3px;
+    }
+    .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .modal {
+        padding: 20px 16px;
+        border-radius: var(--radius-lg);
+        max-height: 95vh;
+        width: 100% !important;
+    }
+    .modal-grid2 {
+        grid-template-columns: 1fr;
+    }
+    .modal-ft {
+        flex-direction: column-reverse;
+    }
+    .modal-ft .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    .dashboard-status-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .dashboard-fin-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    /* ── Responsive grid overrides ── */
+    .cash-summary-grid {
+        grid-template-columns: 1fr;
+    }
+    .cash-form-row3 {
+        grid-template-columns: 1fr;
+    }
+    .cash-form-row2 {
+        grid-template-columns: 1fr;
+    }
+    .payment-form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+    .payment-form-grid .form-col:nth-child(5) {
+        grid-column: 1 / -1;
+    }
+    .toast-stack {
+        bottom: 16px;
+        right: 16px;
+        left: 16px;
+    }
+    .toast {
+        max-width: 100%;
+    }
+    .welcome {
+        padding: 40px 24px;
+    }
+    .welcome-icon {
+        font-size: 40px;
+    }
+    .welcome h2 {
+        font-size: 18px;
+    }
+    .sig-row {
+        grid-template-columns: 1fr;
+    }
+    .form-actions {
+        flex-direction: column-reverse;
+    }
+    .form-actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+
+/* ══ Small phones — max-width: 480px ════════════════════════════════════ */
+
+@media (max-width: 480px) {
+    .proj-title {
+        font-size: 17px;
+    }
+    .tab-btn {
+        font-size: 10px;
+        padding: 7px 6px;
+    }
+    .sum-val {
+        font-size: 16px;
+    }
+    .dashboard-status-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+    .dashboard-fin-grid {
+        grid-template-columns: 1fr !important;
+    }
+    .payment-form-grid {
+        grid-template-columns: 1fr;
+    }
+    .payment-form-grid .form-col:nth-child(5) {
+        grid-column: 1;
+    }
 }

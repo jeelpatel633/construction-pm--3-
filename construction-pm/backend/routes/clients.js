@@ -1,19 +1,38 @@
 const router = require('express').Router();
 const db = require('../config/db');
 
+// Helper — returns user_id to filter by based on role + as_user param
+function getFilterUserId(req) {
+    if (req.user.role === 'admin') {
+        const asUser = req.query.as_user;
+        if (!asUser || asUser === 'all') return null; // null = no filter, see all
+        return parseInt(asUser);
+    }
+    return req.user.id; // regular user sees only their own
+}
+
 router.get('/', async(req, res) => {
     try {
         const raw = req.query.search || '';
         const search = raw.trim() !== '' ? `%${raw.trim()}%` : '%';
+        const uid = getFilterUserId(req);
 
-        const [rows] = await db.query(
-            `SELECT c.*, COUNT(p.id) AS project_count
-       FROM clients c
-       LEFT JOIN projects p ON p.client_id = c.id
-       WHERE c.client_name LIKE ? OR c.phone LIKE ?
-       GROUP BY c.id
-       ORDER BY c.created_at DESC`, [search, search]
-        );
+        let sql = `
+      SELECT c.*, COUNT(p.id) AS project_count
+      FROM clients c
+      LEFT JOIN projects p ON p.client_id = c.id
+      WHERE (c.client_name LIKE ? OR c.phone LIKE ?)
+    `;
+        const args = [search, search];
+
+        if (uid !== null) {
+            sql += ' AND c.user_id = ?';
+            args.push(uid);
+        }
+
+        sql += ' GROUP BY c.id ORDER BY c.created_at DESC';
+
+        const [rows] = await db.query(sql, args);
         res.json(rows);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -32,8 +51,16 @@ router.post('/', async(req, res) => {
     try {
         const { client_name, phone, email, address, notes } = req.body;
         if (!client_name) return res.status(400).json({ error: 'client_name required' });
+
+        // Regular user always gets their own user_id
+        // Admin creating a client: assign to as_user or admin themselves
+        let userId = req.user.id;
+        if (req.user.role === 'admin' && req.query.as_user && req.query.as_user !== 'all') {
+            userId = parseInt(req.query.as_user);
+        }
+
         const [r] = await db.query(
-            'INSERT INTO clients (client_name,phone,email,address,notes) VALUES (?,?,?,?,?)', [client_name.trim(), phone || null, email || null, address || null, notes || null]
+            'INSERT INTO clients (user_id, client_name, phone, email, address, notes) VALUES (?,?,?,?,?,?)', [userId, client_name.trim(), phone || null, email || null, address || null, notes || null]
         );
         const [
             [created]

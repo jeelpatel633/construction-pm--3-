@@ -21,7 +21,8 @@ db.query(`
 router.get('/:projectId', async(req, res) => {
     try {
         const [rows] = await db.query(
-            'SELECT * FROM cash_expenses WHERE project_id=? ORDER BY expense_date DESC, id DESC', [req.params.projectId]
+            `SELECT *, DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date
+             FROM cash_expenses WHERE project_id=? ORDER BY expense_date DESC, id DESC`, [req.params.projectId]
         );
         res.json(rows);
     } catch (e) { res.status(500).json({ error: e.message }); }
@@ -39,6 +40,19 @@ router.get('/total/:projectId', async(req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET distinct paid_to names for a project — for autocomplete
+router.get('/vendors/:projectId', async(req, res) => {
+    try {
+        const [rows] = await db.query(
+            `SELECT DISTINCT paid_to, category
+             FROM cash_expenses
+             WHERE project_id = ? AND paid_to IS NOT NULL AND paid_to != ''
+             ORDER BY paid_to ASC`, [req.params.projectId]
+        );
+        res.json(rows);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST new expense
 router.post('/', async(req, res) => {
     try {
@@ -46,14 +60,23 @@ router.post('/', async(req, res) => {
         if (!project_id || !amount) return res.status(400).json({ error: 'project_id and amount required' });
         const [r] = await db.query(
             `INSERT INTO cash_expenses (project_id, expense_date, category, description, amount, paid_to, notes)
-       VALUES (?,?,?,?,?,?,?)`, [project_id, expense_date || new Date().toISOString().slice(0, 10),
-                category || 'Other', description || null,
-                parseFloat(amount), paid_to || null, notes || null
+             VALUES (?,?,?,?,?,?,?)`, [
+                project_id,
+                expense_date || new Date().toISOString().slice(0, 10),
+                category || 'Other',
+                description || null,
+                parseFloat(amount),
+                paid_to || null,
+                notes || null,
             ]
         );
+        // ── DATE_FORMAT here so POST response is also a plain string ──
         const [
             [row]
-        ] = await db.query('SELECT * FROM cash_expenses WHERE id=?', [r.insertId]);
+        ] = await db.query(
+            `SELECT *, DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date
+             FROM cash_expenses WHERE id=?`, [r.insertId]
+        );
         res.status(201).json(row);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -63,13 +86,23 @@ router.put('/:id', async(req, res) => {
     try {
         const { expense_date, category, description, amount, paid_to, notes } = req.body;
         await db.query(
-            `UPDATE cash_expenses SET expense_date=?, category=?, description=?, amount=?, paid_to=?, notes=? WHERE id=?`, [expense_date, category || 'Other', description || null,
-                parseFloat(amount), paid_to || null, notes || null, req.params.id
+            `UPDATE cash_expenses SET expense_date=?, category=?, description=?, amount=?, paid_to=?, notes=? WHERE id=?`, [
+                expense_date,
+                category || 'Other',
+                description || null,
+                parseFloat(amount),
+                paid_to || null,
+                notes || null,
+                req.params.id,
             ]
         );
+        // ── DATE_FORMAT here so PUT response is also a plain string ──
         const [
             [row]
-        ] = await db.query('SELECT * FROM cash_expenses WHERE id=?', [req.params.id]);
+        ] = await db.query(
+            `SELECT *, DATE_FORMAT(expense_date, '%Y-%m-%d') AS expense_date
+             FROM cash_expenses WHERE id=?`, [req.params.id]
+        );
         res.json(row);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });

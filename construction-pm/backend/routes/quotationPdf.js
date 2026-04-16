@@ -283,6 +283,7 @@ router.get('/:projectId', async(req, res) => {
         const pid = req.params.projectId;
         const isPreview = req.query.preview === '1';
         const logId = req.query.logId || null;
+        const showTotal = req.query.showTotal !== '0';
 
         const [
             [
@@ -517,7 +518,7 @@ router.get('/:projectId', async(req, res) => {
                         dontBreakRows: false,
                         keepWithHeaderRows: 1,
                         widths,
-                        body: items.length > 0 ? [headers, ...rows, subtotalRow] : [headers, [{ text: 'No items added yet.', colSpan: headers.length, italics: true, fontSize: 9, color: GRAY, alignment: 'center', margin: [0, 16, 0, 16], border: [false, false, false, false] }, ...Array(headers.length - 1).fill({})]]
+                        body: items.length > 0 ? [headers, ...rows, ...(showTotal ? [subtotalRow] : [])] : [headers, [{ text: 'No items added yet.', colSpan: headers.length, italics: true, fontSize: 9, color: GRAY, alignment: 'center', margin: [0, 16, 0, 16], border: [false, false, false, false] }, ...Array(headers.length - 1).fill({})]]
                     },
                     layout: {
                         fillColor: ri => ri === 0 ? null : (ri % 2 === 0 ? STRIPE : WHITE),
@@ -533,8 +534,8 @@ router.get('/:projectId', async(req, res) => {
                     margin: [0, 0, 0, 22],
                 },
 
-                // ── Total box ─────────────────────────────────────────────────
-                {
+                // ── Total box (conditional) ───────────────────────────────────
+                ...(showTotal ? [{
                     columns: [
                         { width: '*', text: '' },
                         {
@@ -572,7 +573,7 @@ router.get('/:projectId', async(req, res) => {
                         },
                     ],
                     margin: [0, 0, 0, 24],
-                },
+                }] : []),
 
                 // ── Project Vision & Concepts ─────────────────────────────────
                 // The anchor block inside uses dontBreakRows:true on a single-cell

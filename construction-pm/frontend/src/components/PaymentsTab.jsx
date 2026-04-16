@@ -137,7 +137,7 @@ export default function PaymentsTab({ projectId, archTotal, contTotal, onChanged
           )}
         </div>
         {open && (
-          <div className="add-form" style={{ gridTemplateColumns:'1fr 1fr 1fr 1fr 2fr' }}>
+          <div className="add-form payment-form-grid">
             <div className="form-col">
               <label className="form-lbl">Date *</label>
               <input className="form-input" type="date" value={form.payment_date} onChange={e => set('payment_date', e.target.value)} />

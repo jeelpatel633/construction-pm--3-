@@ -28,23 +28,56 @@ function lbhLabel(l, b, h) {
   return '—';
 }
 
-// ── Image compression — higher quality for real-estate POC photos ────────────
+// ── Image compression — maximum quality for real-estate POC photos ────────────
+// Strategy: preserve full resolution up to 2400px, quality 0.97, high-quality
+// bicubic rendering, optional two-pass sharpening for small source images.
 function compressImage(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
       img.onload = () => {
-        const MAX   = 1200; // larger than signature (800) for real-estate sharpness
+        // 2400px — 2× the old 1200px cap → significantly sharper in PDF
+        const MAX   = 2400;
         const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+        const W     = Math.round(img.width  * scale);
+        const H     = Math.round(img.height * scale);
+
+        // Two-pass sharpening: if original image is small, draw at 2× first,
+        // then downscale — browser bicubic produces a natural sharpen pass.
+        const needsSharp = scale === 1 && Math.max(img.width, img.height) < 800;
+
         const canvas = document.createElement('canvas');
-        canvas.width  = Math.round(img.width  * scale);
-        canvas.height = Math.round(img.height * scale);
+        canvas.width  = W;
+        canvas.height = H;
         const ctx = canvas.getContext('2d');
+
+        // Highest quality interpolation
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // White background — handles transparent PNGs cleanly in PDF
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.92));
+        ctx.fillRect(0, 0, W, H);
+
+        if (needsSharp) {
+          // Render at 2× on temp canvas, then downscale for sharpening effect
+          const tmp  = document.createElement('canvas');
+          tmp.width  = W * 2;
+          tmp.height = H * 2;
+          const tctx = tmp.getContext('2d');
+          tctx.imageSmoothingEnabled = true;
+          tctx.imageSmoothingQuality = 'high';
+          tctx.fillStyle = '#ffffff';
+          tctx.fillRect(0, 0, tmp.width, tmp.height);
+          tctx.drawImage(img, 0, 0, tmp.width, tmp.height);
+          ctx.drawImage(tmp, 0, 0, W, H);
+        } else {
+          ctx.drawImage(img, 0, 0, W, H);
+        }
+
+        // 0.97 quality = visually lossless, far sharper than old 0.92
+        resolve(canvas.toDataURL('image/jpeg', 0.97));
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -54,23 +87,43 @@ function compressImage(file) {
   });
 }
 
-// ── Signature compression (unchanged from original) ──────────────────────────
+// ── Signature compression — lossless PNG output, max 1200px ──────────────────
+// PNG is always better for signatures: sharp edges, zero JPEG ringing artifacts
+// on ink strokes. Falls back to high-quality JPEG only if PNG is too large.
 function compressSignature(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
       img.onload = () => {
-        const MAX = 800;
+        // 1200px wide — 1.5× previous cap, sharper in PDF
+        const MAX   = 1200;
         const scale = Math.min(1, MAX / img.width);
+        const W     = Math.round(img.width  * scale);
+        const H     = Math.round(img.height * scale);
+
         const canvas = document.createElement('canvas');
-        canvas.width  = Math.round(img.width  * scale);
-        canvas.height = Math.round(img.height * scale);
+        canvas.width  = W;
+        canvas.height = H;
         const ctx = canvas.getContext('2d');
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // White background so transparent PNGs look clean on PDF
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.95));
+        ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(img, 0, 0, W, H);
+
+        // PNG = lossless = no JPEG artifacts on signature strokes/edges
+        // If PNG exceeds ~350 KB (e.g. photo-style signature), use 0.98 JPEG
+        const pngData = canvas.toDataURL('image/png');
+        const pngKb   = Math.round(pngData.length * 0.75 / 1024);
+        if (pngKb <= 350) {
+          resolve(pngData);  // lossless — best quality
+        } else {
+          resolve(canvas.toDataURL('image/jpeg', 0.98));  // near-lossless fallback
+        }
       };
       img.onerror = reject;
       img.src = e.target.result;
@@ -82,13 +135,11 @@ function compressSignature(file) {
 
 // ── POC image hook — encapsulates all load/add/caption/delete/reorder logic ──
 function usePocImages(projectId) {
-  // meta = lightweight list (id, caption, sort_order, image_preview)
-  // fullImages = { [id]: dataUri } — loaded on-demand per image
-  const [meta,        setMeta]        = useState([]);  // sorted list of image metadata
-  const [fullImages,  setFullImages]  = useState({});  // id → full base64
+  const [meta,        setMeta]        = useState([]);
+  const [fullImages,  setFullImages]  = useState({});
   const [pocLoading,  setPocLoading]  = useState(true);
   const [uploading,   setUploading]   = useState(false);
-  const captionTimers = useRef({});   // debounce caption saves per image id
+  const captionTimers = useRef({});
 
   const loadMeta = useCallback(async () => {
     try {
@@ -98,16 +149,14 @@ function usePocImages(projectId) {
     finally { setPocLoading(false); }
   }, [projectId]);
 
-  // Fetch full base64 for a single image (called when thumbnail mounts)
   const loadFull = useCallback(async (id) => {
-    if (fullImages[id]) return; // already cached
+    if (fullImages[id]) return;
     try {
       const { data } = await axios.get(`/api/quotation-poc/image/${id}`);
       setFullImages(prev => ({ ...prev, [id]: data.image_data }));
     } catch(e) { console.error('POC image load:', id, e); }
   }, [fullImages]);
 
-  // Upload one or more files
   const addImages = useCallback(async (files) => {
     if (!files?.length) return;
     setUploading(true);
@@ -118,7 +167,6 @@ function usePocImages(projectId) {
           image_data: dataUri,
           caption:    null,
         });
-        // Optimistically add to meta list + cache the full image locally
         setMeta(prev => [...prev, { id: data.id, caption: null, sort_order: data.sort_order }]);
         setFullImages(prev => ({ ...prev, [data.id]: dataUri }));
       }
@@ -126,7 +174,6 @@ function usePocImages(projectId) {
     finally { setUploading(false); }
   }, [projectId]);
 
-  // Update caption with 600 ms debounce so we don't hammer DB on every keystroke
   const updateCaption = useCallback((id, caption) => {
     setMeta(prev => prev.map(m => m.id === id ? { ...m, caption } : m));
     clearTimeout(captionTimers.current[id]);
@@ -137,7 +184,6 @@ function usePocImages(projectId) {
     }, 600);
   }, []);
 
-  // Delete
   const deleteImage = useCallback(async (id) => {
     if (!window.confirm('Remove this photo from the PDF?')) return;
     await axios.delete(`/api/quotation-poc/${id}`).catch(console.error);
@@ -145,14 +191,12 @@ function usePocImages(projectId) {
     setFullImages(prev => { const n = {...prev}; delete n[id]; return n; });
   }, []);
 
-  // Move image up in order
   const moveUp = useCallback(async (id) => {
     setMeta(prev => {
       const idx = prev.findIndex(m => m.id === id);
       if (idx <= 0) return prev;
       const next = [...prev];
       [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
-      // Reassign sort_order and persist
       const reordered = next.map((m, i) => ({ ...m, sort_order: i }));
       axios.put(`/api/quotation-poc/reorder/${projectId}`, {
         order: reordered.map(m => ({ id: m.id, sort_order: m.sort_order })),
@@ -174,7 +218,6 @@ function PocThumb({ item, fullImages, loadFull, updateCaption, deleteImage, move
 
   return (
     <div style={{ border:'1px solid var(--border)', borderRadius:'var(--radius)', overflow:'hidden', background:'var(--bg2)', display:'flex', flexDirection:'column' }}>
-      {/* Image area */}
       <div style={{ position:'relative', aspectRatio:'4/3', background:'#E2E8F0', display:'flex', alignItems:'center', justifyContent:'center', overflow:'hidden' }}>
         {src ? (
           <img src={src} alt={item.caption || 'Project photo'}
@@ -182,7 +225,6 @@ function PocThumb({ item, fullImages, loadFull, updateCaption, deleteImage, move
         ) : (
           <div style={{ fontSize:28, opacity:0.3 }}>📷</div>
         )}
-        {/* Action buttons overlay */}
         <div style={{ position:'absolute', top:6, right:6, display:'flex', gap:4 }}>
           {!isFirst && (
             <button
@@ -200,8 +242,6 @@ function PocThumb({ item, fullImages, loadFull, updateCaption, deleteImage, move
           </button>
         </div>
       </div>
-
-      {/* Caption input */}
       <div style={{ padding:'8px 10px' }}>
         <input
           value={item.caption || ''}
@@ -263,8 +303,6 @@ function PocSection({ project }) {
       </div>
 
       <div style={{ padding:'18px 20px' }}>
-
-        {/* Empty state — drop zone */}
         {!pocLoading && meta.length === 0 && (
           <label
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
@@ -287,7 +325,6 @@ function PocSection({ project }) {
           </label>
         )}
 
-        {/* Loading skeleton */}
         {pocLoading && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
             {[1,2].map(i => (
@@ -301,7 +338,6 @@ function PocSection({ project }) {
           </div>
         )}
 
-        {/* Photo grid — 2 columns */}
         {!pocLoading && meta.length > 0 && (
           <>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
@@ -317,8 +353,6 @@ function PocSection({ project }) {
                   isFirst={idx === 0}
                 />
               ))}
-
-              {/* Add-more tile (always visible when photos exist) */}
               <label
                 onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                 onDragLeave={() => setDragOver(false)}
@@ -329,8 +363,6 @@ function PocSection({ project }) {
                 <input type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => addImages(e.target.files)} />
               </label>
             </div>
-
-            {/* Info bar */}
             <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:14, padding:'8px 12px', background:'var(--blue-bg)', border:'1px solid #BFDBFE', borderRadius:'var(--radius)' }}>
               <span style={{ fontSize:14 }}>ℹ️</span>
               <span style={{ fontSize:12, color:'var(--blue)' }}>
@@ -339,16 +371,15 @@ function PocSection({ project }) {
             </div>
           </>
         )}
-
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Main QuotationTab component (unchanged structure — just added PocSection)
+// Main QuotationTab component
 // ─────────────────────────────────────────────────────────────────────────────
-export default function QuotationTab({ project }) {
+export default function QuotationTab({ project, pdfUrl = u => u }) {
   const [rows,           setRows]           = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [open,           setOpen]           = useState(false);
@@ -368,11 +399,12 @@ export default function QuotationTab({ project }) {
   const [sigSaving,    setSigSaving]    = useState(false);
   const [sigSaved,     setSigSaved]     = useState(false);
 
-const [dlLogs,       setDlLogs]       = useState([]);
-const [stmts,        setStmts]        = useState([]);
-const [newStmt,      setNewStmt]      = useState('');
-const [waPopup,      setWaPopup]      = useState(null);
-const [waSending,    setWaSending]    = useState(false);
+  const [dlLogs,       setDlLogs]       = useState([]);
+  const [stmts,        setStmts]        = useState([]);
+  const [newStmt,      setNewStmt]      = useState('');
+  const [waPopup,      setWaPopup]      = useState(null);
+  const [waSending,    setWaSending]    = useState(false);
+  const [showTotalInPdf, setShowTotalInPdf] = useState(true);
 
   const isDirtySig    = useRef(false);
   const autoSaveTimer = useRef(null);
@@ -427,28 +459,19 @@ const [waSending,    setWaSending]    = useState(false);
     triggerAutoSave(updated);
   };
 
-const addStmt = async () => {
-  const trimmed = newStmt.trim();
-  if (!trimmed) return;
+  const addStmt = async () => {
+    const trimmed = newStmt.trim();
+    if (!trimmed) return;
+    const alreadyExists = stmts.some(s => s.statement.toLowerCase() === trimmed.toLowerCase());
+    if (alreadyExists) { alert('This statement is already added'); return; }
+    const updated = [...stmts, { id: Date.now(), statement: trimmed }];
+    setStmts(updated);
+    setNewStmt('');
+    await axios.post(`/api/quotation-statements/bulk/${project.id}`, {
+      statements: updated.map(s => s.statement)
+    }).catch(console.error);
+  };
 
-  // ✅ Prevent duplicate (case-insensitive)
-  const alreadyExists = stmts.some(
-    s => s.statement.toLowerCase() === trimmed.toLowerCase()
-  );
-
-  if (alreadyExists) {
-    alert('This statement is already added');
-    return;
-  }
-
-  const updated = [...stmts, { id: Date.now(), statement: trimmed }];
-  setStmts(updated);
-  setNewStmt('');
-
-  await axios.post(`/api/quotation-statements/bulk/${project.id}`, {
-    statements: updated.map(s => s.statement)
-  }).catch(console.error);
-};
   const removeStmt = async id => {
     const updated = stmts.filter(s => s.id !== id);
     setStmts(updated);
@@ -511,7 +534,7 @@ const addStmt = async () => {
     load();
   };
 
-const flushMeta = async () => {
+  const flushMeta = async () => {
     if (autoSaveTimer.current) {
       clearTimeout(autoSaveTimer.current);
       autoSaveTimer.current = null;
@@ -521,7 +544,7 @@ const flushMeta = async () => {
     } catch(e) { console.error(e); }
   };
 
-const downloadPdf = async () => {
+  const downloadPdf = async () => {
     await flushMeta();
     await saveSig();
     try {
@@ -530,16 +553,15 @@ const downloadPdf = async () => {
         client_name:  project.client_name,
         project_name: project.project_name,
         pdf_type:     'quotation',
-        total_amount: total, // ✅ save total amount
+        total_amount: total,
       });
       const logData = res.data;
       setDlLogs(prev => [logData, ...prev]);
-      window.open(`/api/quotation-pdf/${project.id}?logId=${logData.id}`, '_blank');
-      // ✅ Show WhatsApp popup after short delay (let PDF open first)
+      window.open(pdfUrl(`/api/quotation-pdf/${project.id}?logId=${logData.id}`), '_blank');
       setTimeout(() => setWaPopup(logData), 500);
     } catch(e) {
       console.error(e);
-      window.open(`/api/quotation-pdf/${project.id}`, '_blank');
+      window.open(pdfUrl(`/api/quotation-pdf/${project.id}&showTotal=${showTotalInPdf?'1':'0'}`), '_blank');
     }
   };
 
@@ -548,33 +570,25 @@ const downloadPdf = async () => {
     try {
       await flushMeta();
       await saveSig();
-      window.open(`/api/quotation-pdf/${project.id}?preview=1&t=${Date.now()}`, '_blank');
+      window.open(pdfUrl(`/api/quotation-pdf/${project.id}?preview=1&showTotal=${showTotalInPdf?'1':'0'}&t=${Date.now()}`), '_blank');
     } catch(e) { alert('Preview failed. Try Download.'); }
     finally { setPreviewLoading(false); }
   };
 
-// ✅ WhatsApp send function
-const sendWhatsApp = async (log) => {
-    if (waSending) return; // prevent double click
+  const sendWhatsApp = async (log) => {
+    if (waSending) return;
     setWaSending(true);
     try {
-      // ✅ Backend retries until Cloudinary URL is ready
       const { data } = await axios.get(`/api/download-logs/whatsapp/${log.id}`);
       const phone = data.phone ? data.phone.replace(/\D/g, '') : null;
       if (!phone) { alert('No phone number found for this client!'); return; }
-
-      // ✅ Use resolved_pdf_url from backend (always correct, never localhost)
       const pdfLink = data.resolved_pdf_url;
-
       const amount = data.total_amount
         ? '₹' + parseFloat(data.total_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })
         : '';
-
       const date = new Date(data.downloaded_at).toLocaleDateString('en-IN', {
         day: '2-digit', month: 'short', year: 'numeric'
       });
-
-      // ✅ Professional message
       const message = [
         `Hello ${data.client_name}! 👋`,
         ``,
@@ -593,7 +607,6 @@ const sendWhatsApp = async (log) => {
         `— *Dhaval Mevada*`,
         `*Navyakar | Building Dreams, Crafting Reality* 🏠`,
       ].filter(line => line !== null && !(line === '' && false)).join('\n');
-
       const waUrl = `https://wa.me/91${phone}?text=${encodeURIComponent(message)}`;
       window.open(waUrl, '_blank');
       setWaPopup(null);
@@ -608,7 +621,6 @@ const sendWhatsApp = async (log) => {
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
 
-      {/* ✅ WhatsApp Popup */}
       {waPopup && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <div style={{background:'#fff',borderRadius:16,padding:28,maxWidth:420,width:'90%',boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
@@ -771,7 +783,7 @@ const sendWhatsApp = async (log) => {
         )}
       </div>
 
-      {/* ── 🆕 Project Vision & Concepts ── */}
+      {/* ── Project Vision & Concepts ── */}
       <PocSection project={project} />
 
       {/* ── Terms & Conditions ── */}
@@ -873,7 +885,7 @@ const sendWhatsApp = async (log) => {
                       }}>
                       <div style={{fontSize:32,marginBottom:8}}>🖊️</div>
                       <div style={{fontSize:14,fontWeight:600,color:'#334155',marginBottom:4}}>Click or Drag &amp; Drop signature</div>
-                      <div style={{fontSize:12,color:'#94A3B8',marginBottom:12}}>PNG recommended · Auto white background · High quality preserved</div>
+                      <div style={{fontSize:12,color:'#94A3B8',marginBottom:12}}>PNG recommended · Auto white background · Lossless quality preserved</div>
                       <input type="file" accept="image/*" style={{display:'none'}}
                         onChange={async e=>{
                           const file = e.target.files[0];
@@ -925,7 +937,7 @@ const sendWhatsApp = async (log) => {
                 </div>
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
                   {log.id && (
-                    <button onClick={() => window.open(`/api/download-logs/view/${log.id}`, '_blank')}
+                    <button onClick={() => window.open(pdfUrl(`/api/download-logs/view/${log.id}`), '_blank')}
                       style={{fontSize:11,fontWeight:600,color:'#2563EB',background:'#EFF6FF',border:'1px solid #BFDBFE',borderRadius:6,padding:'3px 10px',cursor:'pointer'}}>
                       👁️ View
                     </button>
@@ -945,8 +957,19 @@ const sendWhatsApp = async (log) => {
       )}
 
       {/* ── PDF Actions ── */}
-      <div style={{display:'flex',gap:12,justifyContent:'flex-end',alignItems:'center'}}>
+      <div style={{display:'flex',gap:12,justifyContent:'flex-end',alignItems:'center',flexWrap:'wrap'}}>
         <div style={{fontSize:12,color:'var(--text-3)'}}>Generate a professional quotation PDF with client &amp; project details</div>
+
+        {/* Total Amount toggle */}
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',background:'var(--bg2)',border:'1px solid var(--border)',borderRadius:20,cursor:'pointer'}} onClick={()=>setShowTotalInPdf(v=>!v)}>
+          <div style={{width:32,height:18,borderRadius:9,background:showTotalInPdf?'#F97316':'#CBD5E1',transition:'background 0.2s',position:'relative',flexShrink:0}}>
+            <div style={{position:'absolute',top:2,left:showTotalInPdf?14:2,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left 0.2s',boxShadow:'0 1px 3px rgba(0,0,0,0.2)'}} />
+          </div>
+          <span style={{fontSize:12,fontWeight:600,color:showTotalInPdf?'var(--text)':'var(--text-3)',whiteSpace:'nowrap'}}>
+            Show Total in PDF
+          </span>
+        </div>
+
         <button className="btn btn-outline" onClick={previewPdf} disabled={previewLoading}>
           {previewLoading?'⏳ Loading…':'👁️ Preview Quotation'}
         </button>

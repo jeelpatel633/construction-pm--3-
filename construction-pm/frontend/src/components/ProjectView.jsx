@@ -4,6 +4,7 @@ import ProjectModal from './ProjectModal.jsx';
 import WorkTable    from './WorkTable.jsx';
 import PaymentsTab  from './PaymentsTab.jsx';
 import InvoiceTab   from './InvoiceTab.jsx';
+import VendorBillsTab from './VendorBillsTab.jsx';
 import QuotationTab     from './QuotationTab.jsx';
 import CashExpenseTab  from './CashExpenseTab.jsx';
 
@@ -15,17 +16,17 @@ const STATUS_CLS = {
   completed:'badge-completed', cancelled:'badge-cancelled',
 };
 
-// ✅ Labels changed
 const TABS = [
-  { key:'architect',  label:'Actual Unit Invoice', icon:'📐' },
-  { key:'contractor', label:'Fix Unit Invoice',    icon:'📊' },
-  { key:'payments',   label:'Cash In',             icon:'💰' },
-  { key:'cashout',    label:'Cash Out',            icon:'💸' },
-  { key:'invoice',    label:'Invoice & PDF',       icon:'📄' },
-  { key:'quotation',  label:'Quotation',           icon:'📋' },
+  { key:'architect',    label:'Actual Unit Invoice', icon:'📐' },
+  { key:'contractor',   label:'Fix Unit Invoice',    icon:'📊' },
+  { key:'payments',     label:'Cash In',             icon:'💰' },
+  { key:'cashout',      label:'Cash Out',            icon:'💸' },
+  { key:'vendorbills',  label:'Vendor Bills',        icon:'📋' },  // ← ADD
+  { key:'invoice',      label:'Invoice & PDF',       icon:'📄' },
+  { key:'quotation',    label:'Quotation',           icon:'📋' },
 ];
 
-export default function ProjectView({ client, onEditClient, onClientDeleted, toast }) {
+export default function ProjectView({ client, onEditClient, onClientDeleted, toast, asUser, pdfUrl = u => u }) {
   const [project,    setProject]    = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [activeTab,  setActiveTab]  = useState('architect');
@@ -157,13 +158,17 @@ export default function ProjectView({ client, onEditClient, onClientDeleted, toa
           )}
           {activeTab === 'invoice' && (
             <InvoiceTab key={`inv-${project.id}`} project={project}
-              archTotal={archTotal} contTotal={contTotal} onProjectUpdated={refresh} />
+            archTotal={archTotal} contTotal={contTotal} onProjectUpdated={refresh} pdfUrl={pdfUrl} />
           )}
           {activeTab === 'quotation' && (
-            <QuotationTab key={`quo-${project.id}`} project={project} />
+            <QuotationTab key={`quo-${project.id}`} project={project} pdfUrl={pdfUrl} />
           )}
           {activeTab === 'cashout' && (
             <CashExpenseTab key={`cash-${project.id}`} projectId={project.id} cashIn={totalPaid} />
+          )}
+          {/* ── ADD THIS BLOCK ── */}
+          {activeTab === 'vendorbills' && (
+            <VendorBillsTab key={`vb-${project.id}`} projectId={project.id} />
           )}
         </>
       )}
