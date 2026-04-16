@@ -557,7 +557,7 @@ export default function QuotationTab({ project, pdfUrl = u => u }) {
       });
       const logData = res.data;
       setDlLogs(prev => [logData, ...prev]);
-      window.open(pdfUrl(`/api/quotation-pdf/${project.id}?logId=${logData.id}`), '_blank');
+      window.open(pdfUrl(`/api/quotation-pdf/${project.id}?logId=${logData.id}&showTotal=${showTotalInPdf?'1':'0'}`);
       setTimeout(() => setWaPopup(logData), 500);
     } catch(e) {
       console.error(e);
